@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>tristans movie search</title>
+  <style>
+    body {
+      background-color: #111;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      text-align: center;
+    }
+
+    input[type="text"] {
+      width: 300px;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      margin-bottom: 20px;
+    }
+
+    .result {
+      margin: 20px auto;
+      padding: 15px;
+      background-color: #222;
+      border-radius: 8px;
+      display: flex;
+      gap: 20px;
+      width: 600px;
+      text-align: left;
+      align-items: center;
+    }
+
+    .poster {
+      width: 100px;
+      border-radius: 5px;
+    }
+
+    .info {
+      flex: 1;
+    }
+
+    .info h3 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .info select,
+    .watch-btn {
+      margin-top: 10px;
+      padding: 8px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: none;
+    }
+
+    .watch-btn {
+      background-color: #28a745;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .watch-btn:hover {
+      background-color: #218838;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎬 IMDB Search to Stream</h1>
+  <input type="text" id="searchInput" placeholder="Search for a movie or show...">
+
+  <div id="results"></div>
+
+  <script>
+    const apiKey = "656d0795"; // Your OMDb API key
+    const searchInput = document.getElementById("searchInput");
+    const resultsDiv = document.getElementById("results");
+
+    let debounceTimeout;
+
+    searchInput.addEventListener("input", () => {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(fetchResults, 500);
+    });
+
+    async function fetchResults() {
+      const query = searchInput.value.trim();
+      if (!query) return resultsDiv.innerHTML = "";
+
+      const res = await fetch(`https://www.omdbapi.com/?apikey=${apiKey}&s=${encodeURIComponent(query)}`);
+      const data = await res.json();
+
+      if (data.Response === "False") {
+        resultsDiv.innerHTML = `<p>No results found.</p>`;
+        return;
+      }
+
+      resultsDiv.innerHTML = "";
+      for (const item of data.Search) {
+        const isSeries = item.Type === "series";
+        const id = item.imdbID;
+        const resDetail = await fetch(`https://www.omdbapi.com/?apikey=${apiKey}&i=${id}&plot=short`);
+        const fullData = await resDetail.json();
+
+        const container = document.createElement("div");
+        container.className = "result";
+
+        const poster = document.createElement("img");
+        poster.className = "poster";
+        poster.src = item.Poster !== "N/A" ? item.Poster : "https://via.placeholder.com/100x150?text=No+Image";
+        container.appendChild(poster);
+
+        const info = document.createElement("div");
+        info.className = "info";
+
+        const title = document.createElement("h3");
+        title.textContent = `${item.Title} (${item.Year})`;
+        info.appendChild(title);
+
+        if (isSeries) {
+          const seasonSelect = document.createElement("select");
+          const episodeSelect = document.createElement("select");
+
+          seasonSelect.addEventListener("change", async () => {
+            await loadEpisodes(id, seasonSelect.value, episodeSelect);
+          });
+
+          for (let i = 1; i <= (parseInt(fullData.totalSeasons) || 1); i++) {
+            const option = document.createElement("option");
+            option.value = i;
+            option.textContent = `Season ${i}`;
+            seasonSelect.appendChild(option);
+          }
+
+          await loadEpisodes(id, 1, episodeSelect);
+
+          const watchBtn = document.createElement("a");
+          watchBtn.className = "watch-btn";
+          watchBtn.target = "_blank";
+          watchBtn.textContent = "▶️ Watch";
+          watchBtn.addEventListener("click", () => {
+            const s = seasonSelect.value;
+            const e = episodeSelect.value;
+            const link = `https://multiembed.mov/directstream.php?video_id=${id}&s=${s}&e=${e}`;
+            watchBtn.href = link;
+          });
+
+          info.appendChild(seasonSelect);
+          info.appendChild(episodeSelect);
+          info.appendChild(watchBtn);
+
+        } else {
+          const watchBtn = document.createElement("a");
+          watchBtn.className = "watch-btn";
+          watchBtn.href = `https://multiembed.mov/directstream.php?video_id=${id}`;
+          watchBtn.textContent = "▶️ Watch";
+          watchBtn.target = "_blank";
+          info.appendChild(watchBtn);
+        }
+
+        container.appendChild(info);
+        resultsDiv.appendChild(container);
+      }
+    }
+
+    async function loadEpisodes(imdbID, season, episodeSelect) {
+      const episodeRes = await fetch(`https://www.omdbapi.com/?apikey=${apiKey}&i=${imdbID}&season=${season}`);
+      const seasonData = await episodeRes.json();
+
+      episodeSelect.innerHTML = "";
+      if (seasonData.Episodes) {
+        seasonData.Episodes.forEach(ep => {
+          const opt = document.createElement("option");
+          opt.value = ep.Episode;
+          opt.textContent = `Ep ${ep.Episode}: ${ep.Title}`;
+          episodeSelect.appendChild(opt);
+        });
+      }
+    }
+  </script>
+
+</body>
+</html>
